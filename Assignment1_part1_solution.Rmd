@@ -1,0 +1,223 @@
+---
+title: "Assignment1_part1_solution"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include = FALSE}
+library(pacman)
+p_load(tidyverse, rethinking, brms)
+```
+
+
+```{r}
+#defining the grid of 10000 possible parameter values, more is always better right? and when it's a low computational effort like here, 10000 seems reasonable.
+dens = 1e4
+p_grid = seq(from=0, to=1, length.out = dens)
+
+# priors - n is equal to grid density (number of parameter values to estimate)
+prior_unif = rep(1,dens)
+prior_norm = rnorm(dens,mean = 0.8, sd = 0.2)
+```
+
+
+```{r}
+
+#Calculating the likelihood at probability of correct answer = p_grid for cogsci teachers to get the ratio of correct answers they did.
+likelihood_riccardo = dbinom(3 ,size = 6,prob = p_grid )
+likelihood_kristian = dbinom(2 ,size = 2,prob = p_grid )
+likelihood_daina = dbinom(160 ,size = 198,prob = p_grid )
+likelihood_mikkel = dbinom(66 ,size = 132,prob = p_grid )
+
+#Calculating the unstandardised posteriors for each teacher
+unstd_posterior_riccardo = likelihood_riccardo * prior_unif
+unstd_posterior_kristian = likelihood_kristian * prior_unif
+unstd_posterior_daina = likelihood_daina * prior_unif
+unstd_posterior_mikkel = likelihood_mikkel * prior_unif
+
+#standardising the posterior for each teacher
+posterior_riccardo = unstd_posterior_riccardo/sum(unstd_posterior_riccardo)
+posterior_kristian = unstd_posterior_kristian/sum(unstd_posterior_kristian)
+posterior_daina = unstd_posterior_daina/sum(unstd_posterior_daina)
+posterior_mikkel = unstd_posterior_mikkel/sum(unstd_posterior_mikkel)
+
+#making a dataframe of grid, posterior, prior_unif, and likelihood for each teacher
+df_unif_prior_riccardo = data.frame(grid = p_grid, posterior = posterior_riccardo, prior = prior_unif, likelihood = likelihood_riccardo)
+df_unif_prior_kristian = data.frame(grid = p_grid, posterior = posterior_kristian, prior = prior_unif, likelihood = likelihood_kristian)
+df_unif_prior_daina = data.frame(grid = p_grid, posterior = posterior_daina, prior = prior_unif, likelihood = likelihood_daina)
+df_unif_prior_mikkel = data.frame(grid = p_grid, posterior = posterior_mikkel, prior = prior_unif, likelihood = likelihood_mikkel)
+
+#plotting the posterior for each teacher
+plot_ric_post = ggplot(df_unif_prior_riccardo, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_ric_post
+plot_kri_post = ggplot(df_unif_prior_kristian, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_kri_post
+plot_dai_post = ggplot(df_unif_prior_daina, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_dai_post
+plot_mik_post = ggplot(df_unif_prior_mikkel, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_mik_post
+plot_prior =ggplot(df_unif_prior_riccardo, aes(grid,prior)) + geom_point()+geom_line()+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using a uniform prior the plot if the prior is the same for all values, a flat line
+plot_prior
+# sampling from the posteriors of the teachers
+samples_riccardo = sample(p_grid, prob = posterior_riccardo, size = 1e4, replace = T)
+samples_kristian = sample(p_grid, prob = posterior_kristian, size = 1e4, replace = T)
+samples_daina = sample(p_grid, prob = posterior_daina, size = 1e4, replace = T)
+samples_mikkel = sample(p_grid, prob = posterior_mikkel, size = 1e4, replace = T)
+
+# calculating the ratio of answers above chance level for riccardo, using samples from the posterior, while I could use the actual posterior distribution,
+prob_above_chance_riccardo = sum(samples_riccardo)/1e4 # ~0.5, this makes intuitive sense given the ratio of correct answers and the uniform prior.
+prob_above_chance_kristian = sum(samples_kristian)/1e4 # ~0.75 Kristian only answered 2 questions, but with a correct ratio of 1, but the uniform prior smooths that out over the whole spectrum from 0-1
+prob_above_chance_daina = sum(samples_daina)/1e4 # ~0.8, similar to her actual ratio, we have a lot of data from daina, and the data "overpowers" the uniform prior
+prob_above_chance_mikkel = sum(samples_mikkel)/1e4 #also ~0.5 similar to riccardo,but with more data, so looking at the plots of the posteriors, we see the model is much more certain of mikkels ratio, the tails are no where near as long.
+
+
+#assessing riccardo's knowledge of cogsci with quadratic approximation
+
+riccardo_quap = quap(
+  alist( R ~ dbinom(R+W, p), #R is the number of right answers and W is the number of wrong answers.
+         p ~ dunif(0,1)),
+  data = list(R=3,W=3) )
+
+precis(riccardo_quap)# the quadratic approximation gives roughly the same estimate of the mean as the grid approximation, as it should.
+
+```
+
+
+```{r}
+#Making new posteriors with the normal prior instead of the uniform
+
+unstd_posterior_norm_riccardo = likelihood_riccardo * prior_norm
+unstd_posterior_norm_kristian = likelihood_kristian * prior_norm
+unstd_posterior_norm_daina = likelihood_daina * prior_norm
+unstd_posterior_norm_mikkel = likelihood_mikkel * prior_norm
+
+#standardising the posterior for each teacher
+posterior_norm_riccardo = unstd_posterior_norm_riccardo/sum(unstd_posterior_norm_riccardo)
+posterior_norm_kristian = unstd_posterior_norm_kristian/sum(unstd_posterior_norm_kristian)
+posterior_norm_daina = unstd_posterior_norm_daina/sum(unstd_posterior_norm_daina)
+posterior_norm_mikkel = unstd_posterior_norm_mikkel/sum(unstd_posterior_norm_mikkel)
+
+#making a dataframe of grid, posterior, prior_unif, and likelihood for each teacher
+df_norm_prior_riccardo = data.frame(grid = p_grid, posterior = posterior_norm_riccardo, prior = prior_norm, likelihood = likelihood_riccardo)
+df_norm_prior_kristian = data.frame(grid = p_grid, posterior = posterior_norm_kristian, prior = prior_norm, likelihood = likelihood_kristian)
+df_norm_prior_daina = data.frame(grid = p_grid, posterior = posterior_norm_daina, prior = prior_norm, likelihood = likelihood_daina)
+df_norm_prior_mikkel = data.frame(grid = p_grid, posterior = posterior_norm_mikkel, prior = prior_norm, likelihood = likelihood_mikkel)
+
+#plotting the posterior for each teacher
+plot_ric_post_norm = ggplot(df_norm_prior_riccardo, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_ric_post_norm
+plot_kri_post_norm = ggplot(df_norm_prior_kristian, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_kri_post_norm
+plot_dai_post_norm = ggplot(df_norm_prior_daina, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_dai_post_norm
+plot_mik_post_norm = ggplot(df_norm_prior_mikkel, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_mik_post_norm
+plot_prior_norm =ggplot(df_norm_prior_riccardo, aes(grid,prior)) + geom_point(aes(alpha=0.3))+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using the same prior the plot of the prior is the same for all teachers, a normal distribution centered at 0.8 with sd = 0.2
+plot_prior_norm
+dens(prior_norm) # another view of the normal prior showing density rather than points.
+
+```
+
+
+```{r}
+#making new models with data multiplied by 100
+likelihood_riccardo_2 = dbinom(300 ,size = 600,prob = p_grid )
+likelihood_kristian_2 = dbinom(200 ,size = 200,prob = p_grid )
+likelihood_daina_2 = dbinom(16000 ,size = 19800,prob = p_grid )
+likelihood_mikkel_2 = dbinom(6600 ,size = 13200,prob = p_grid )
+
+
+#Calculating the unstandardised posteriors for each teacher
+unstd_posterior_riccardo_2 = likelihood_riccardo_2 * prior_unif
+unstd_posterior_kristian_2 = likelihood_kristian_2 * prior_unif
+unstd_posterior_daina_2 = likelihood_daina_2 * prior_unif
+unstd_posterior_mikkel_2 = likelihood_mikkel_2 * prior_unif
+
+#standardising the posterior for each teacher
+posterior_riccardo_2 = unstd_posterior_riccardo_2/sum(unstd_posterior_riccardo_2)
+posterior_kristian_2 = unstd_posterior_kristian_2/sum(unstd_posterior_kristian_2)
+posterior_daina_2 = unstd_posterior_daina_2/sum(unstd_posterior_daina_2)
+posterior_mikkel_2 = unstd_posterior_mikkel_2/sum(unstd_posterior_mikkel_2)
+
+#making a dataframe of grid, posterior, prior_unif, and likelihood for each teacher
+df_unif_prior_riccardo_2 = data.frame(grid = p_grid, posterior = posterior_riccardo_2, prior = prior_unif, likelihood = likelihood_riccardo_2)
+df_unif_prior_kristian_2 = data.frame(grid = p_grid, posterior = posterior_kristian_2, prior = prior_unif, likelihood = likelihood_kristian_2)
+df_unif_prior_daina_2 = data.frame(grid = p_grid, posterior = posterior_daina_2, prior = prior_unif, likelihood = likelihood_daina_2)
+df_unif_prior_mikkel_2 = data.frame(grid = p_grid, posterior = posterior_mikkel_2, prior = prior_unif, likelihood = likelihood_mikkel_2)
+
+#plotting the posterior for each teacher
+plot_ric_post_2 = ggplot(df_unif_prior_riccardo_2, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_ric_post_2
+plot_kri_post_2 = ggplot(df_unif_prior_kristian_2, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_kri_post_2
+plot_dai_post_2 = ggplot(df_unif_prior_daina_2, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_dai_post_2
+plot_mik_post_2 = ggplot(df_unif_prior_mikkel_2, aes(grid,posterior)) +  geom_point() +geom_line()+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_mik_post_2
+plot_prior =ggplot(df_unif_prior_riccardo, aes(grid,prior)) + geom_point()+geom_line()+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using a uniform prior the plot if the prior is the same for all values, a flat line
+plot_prior
+#all the teachers' posteriors look much much narrower, the models have become more certain of their estimates with the increased amount of data they have been provided.
+
+# sampling from the posteriors of the teachers
+samples_riccardo_2 = sample(p_grid, prob = posterior_riccardo_2, size = 1e4, replace = T)
+samples_kristian_2 = sample(p_grid, prob = posterior_kristian_2, size = 1e4, replace = T)
+samples_daina_2 = sample(p_grid, prob = posterior_daina_2, size = 1e4, replace = T)
+samples_mikkel_2 = sample(p_grid, prob = posterior_mikkel_2, size = 1e4, replace = T)
+
+# calculating the ratio of answers above chance level for riccardo, using samples from the posterior, while I could use the actual posterior distribution, according to mcelreath getting used to working with samples is better.
+prob_above_chance_riccardo_2 = sum(samples_riccardo_2)/1e4 # 
+prob_above_chance_riccardo_2
+prob_above_chance_kristian_2 = sum(samples_kristian_2)/1e4 # 
+prob_above_chance_kristian_2
+prob_above_chance_daina_2 = sum(samples_daina_2)/1e4 #
+prob_above_chance_daina_2
+prob_above_chance_mikkel_2 = sum(samples_mikkel_2)/1e4 #
+prob_above_chance_mikkel_2
+#prob_above_chance_teacher_2 is only noticeably different for Kristian, this makes sense as he has the by far most extreme ratio of 200/200, and he only had 2 answers before multiplying data with 100, his estimate has gone from .75 to .99 with more data, this makes sense as more data would make the model more certain.
+
+
+
+
+
+
+# making new plots with normal priors
+
+
+unstd_posterior_norm_riccardo_2 = likelihood_riccardo_2 * prior_norm
+unstd_posterior_norm_kristian_2 = likelihood_kristian_2 * prior_norm
+unstd_posterior_norm_daina_2 = likelihood_daina_2 * prior_norm
+unstd_posterior_norm_mikkel_2 = likelihood_mikkel_2 * prior_norm
+
+#standardising the posterior for each teacher
+posterior_norm_riccardo_2 = unstd_posterior_norm_riccardo_2/sum(unstd_posterior_norm_riccardo_2)
+posterior_norm_kristian_2 = unstd_posterior_norm_kristian_2/sum(unstd_posterior_norm_kristian_2)
+posterior_norm_daina_2 = unstd_posterior_norm_daina_2/sum(unstd_posterior_norm_daina_2)
+posterior_norm_mikkel_2 = unstd_posterior_norm_mikkel_2/sum(unstd_posterior_norm_mikkel_2)
+
+#making a dataframe of grid, posterior, prior_unif, and likelihood for each teacher
+df_norm_prior_riccardo_2 = data.frame(grid = p_grid, posterior = posterior_norm_riccardo_2, prior = prior_norm, likelihood = likelihood_riccardo_2)
+df_norm_prior_kristian_2 = data.frame(grid = p_grid, posterior = posterior_norm_kristian_2, prior = prior_norm, likelihood = likelihood_kristian_2)
+df_norm_prior_daina_2 = data.frame(grid = p_grid, posterior = posterior_norm_daina_2, prior = prior_norm, likelihood = likelihood_daina_2)
+df_norm_prior_mikkel_2 = data.frame(grid = p_grid, posterior = posterior_norm_mikkel_2, prior = prior_norm, likelihood = likelihood_mikkel_2)
+
+#plotting the posterior for each teacher
+plot_ric_post_norm_2 = ggplot(df_norm_prior_riccardo_2, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_ric_post_norm_2
+plot_kri_post_norm_2 = ggplot(df_norm_prior_kristian_2, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_kri_post_norm_2
+plot_dai_post_norm_2 = ggplot(df_norm_prior_daina_2, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_dai_post_norm_2
+plot_mik_post_norm_2 = ggplot(df_norm_prior_mikkel_2, aes(grid,posterior)) +  geom_point(aes(alpha=0.3)) +geom_line(aes(alpha=0.3))+theme_classic() + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+plot_mik_post_norm_2
+plot_prior_norm =ggplot(df_norm_prior_riccardo, aes(grid,prior)) + geom_point(aes(alpha=0.3))+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using the same prior the plot of the prior is the same for all teachers, a normal distribution centered at 0.8 with sd = 0.2
+plot_prior_norm
+
+#these show much the same picture as with the uniform prior, the model has become increasingly certain with the larger amount of data, this also shows that the models learns from the data.
+
+```
+
+
