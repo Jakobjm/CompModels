@@ -101,7 +101,7 @@ posterior_norm_kristian = unstd_posterior_norm_kristian/sum(unstd_posterior_norm
 posterior_norm_daina = unstd_posterior_norm_daina/sum(unstd_posterior_norm_daina)
 posterior_norm_mikkel = unstd_posterior_norm_mikkel/sum(unstd_posterior_norm_mikkel)
 
-#making a dataframe of grid, posterior, prior_unif, and likelihood for each teacher
+#making a dataframe of grid, posterior, prior_norm, and likelihood for each teacher
 df_norm_prior_riccardo = data.frame(grid = p_grid, posterior = posterior_norm_riccardo, prior = prior_norm, likelihood = likelihood_riccardo)
 df_norm_prior_kristian = data.frame(grid = p_grid, posterior = posterior_norm_kristian, prior = prior_norm, likelihood = likelihood_kristian)
 df_norm_prior_daina = data.frame(grid = p_grid, posterior = posterior_norm_daina, prior = prior_norm, likelihood = likelihood_daina)
@@ -215,6 +215,7 @@ plot_mik_post_norm_2 = ggplot(df_norm_prior_mikkel_2, aes(grid,posterior)) +  ge
 plot_mik_post_norm_2
 plot_prior_norm =ggplot(df_norm_prior_riccardo, aes(grid,prior)) + geom_point(aes(alpha=0.3))+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using the same prior the plot of the prior is the same for all teachers, a normal distribution centered at 0.8 with sd = 0.2
 plot_prior_norm
+
 
 #these show much the same picture as with the uniform prior, the model has become increasingly certain with the larger amount of data, this also shows that the models learns from the data.
 
