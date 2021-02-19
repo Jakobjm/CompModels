@@ -120,6 +120,21 @@ plot_prior_norm =ggplot(df_norm_prior_riccardo, aes(grid,prior)) + geom_point(ae
 plot_prior_norm
 dens(prior_norm) # another view of the normal prior showing density rather than points.
 
+samples_riccardo_norm = sample(p_grid, prob = posterior_norm_riccardo, size = 1e4, replace = T)
+samples_kristian_norm = sample(p_grid, prob = posterior_norm_kristian, size = 1e4, replace = T)
+samples_daina_norm = sample(p_grid, prob = posterior_norm_daina, size = 1e4, replace = T)
+samples_mikkel_norm = sample(p_grid, prob = posterior_norm_mikkel, size = 1e4, replace = T)
+
+# calculating the ratio of answers above chance level for riccardo, using samples from the posterior, while I could use the actual posterior distribution, according to mcelreath getting used to working with samples is better.
+prob_above_chance_riccardo_norm = sum(samples_riccardo_norm)/1e4 # 
+prob_above_chance_riccardo_norm
+prob_above_chance_kristian_norm = sum(samples_kristian_norm)/1e4 # 
+prob_above_chance_kristian_norm
+prob_above_chance_daina_norm = sum(samples_daina_norm)/1e4 #
+prob_above_chance_daina_norm
+prob_above_chance_mikkel_norm = sum(samples_mikkel_norm)/1e4 #
+prob_above_chance_mikkel_norm
+
 ```
 
 
@@ -216,8 +231,25 @@ plot_mik_post_norm_2
 plot_prior_norm =ggplot(df_norm_prior_riccardo, aes(grid,prior)) + geom_point(aes(alpha=0.3))+theme_classic() +xlab("Knowledge of Cogsci")+ ylab("Prior probability") # since were using the same prior the plot of the prior is the same for all teachers, a normal distribution centered at 0.8 with sd = 0.2
 plot_prior_norm
 
-
 #these show much the same picture as with the uniform prior, the model has become increasingly certain with the larger amount of data, this also shows that the models learns from the data.
+
+
+
+
+samples_riccardo_norm_2 = sample(p_grid, prob = posterior_norm_riccardo_2, size = 1e4, replace = T)
+samples_kristian_norm_2 = sample(p_grid, prob = posterior_norm_kristian_2, size = 1e4, replace = T)
+samples_daina_norm_2 = sample(p_grid, prob = posterior_norm_daina_2, size = 1e4, replace = T)
+samples_mikkel_norm_2 = sample(p_grid, prob = posterior_norm_mikkel_2, size = 1e4, replace = T)
+
+# calculating the ratio of answers above chance level for riccardo, using samples from the posterior, while I could use the actual posterior distribution, according to mcelreath getting used to working with samples is better.
+prob_above_chance_riccardo_norm_2 = sum(samples_riccardo_norm_2)/1e4 # 
+prob_above_chance_riccardo_norm_2
+prob_above_chance_kristian_norm_2 = sum(samples_kristian_norm_2)/1e4 # 
+prob_above_chance_kristian_norm_2
+prob_above_chance_daina_norm_2 = sum(samples_daina_norm_2)/1e4 #
+prob_above_chance_daina_norm_2
+prob_above_chance_mikkel_norm_2 = sum(samples_mikkel_norm_2)/1e4 #
+prob_above_chance_mikkel_norm_2
 
 ```
 
