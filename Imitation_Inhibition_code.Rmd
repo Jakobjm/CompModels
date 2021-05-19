@@ -1,0 +1,600 @@
+---
+title: "ImitationInhibition"
+author: "Jakob Mørup"
+date: "5/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+#setting wd, loading packages, loading data.
+
+
+setwd("C:/Users/Jakob/Desktop/CogSci/Comp Models/Assignment4")
+pacman::p_load(tidyverse, brms, bayesplot, rethinking, patchwork, metafor, brmstools, tidybayes)
+d <- read.csv("ImiInhiData.csv", sep = ";")
+
+
+
+```
+
+
+###Preprocessing Data
+```{r}
+#making participant a factor and renaming levels, for easier labeling and anonymity.
+d$Participant = as.factor(d$Participant)
+levels(d$Participant) = c(1:45)
+
+#recreating the congruity label in case of inconsistencies
+d$Order_number = as.factor(d$Order_number)
+d$Finger_Screen = as.factor(d$Finger_Screen)
+d$Congruity = if_else(d$Order_number == d$Finger_Screen, "Yes", "No")
+
+#renaming response variables to index and middle instead of lcmd and lalt
+d$Response = if_else(d$Response == "lcmd", "Index", "Middle")
+
+#recreating correctness values in case of inconsistencies
+d$Correctness = if_else(d$Response == d$Order_number, 1,0)
+
+#dropping rows with negative recorded reaction time, as reaction times cannot be negative.
+d = d[(d$Reaction_time > 0 ),]
+#converting to actual milliseconds
+d$Reaction_time = d$Reaction_time * 1000 
+
+#there is a few very high reaction times (rt > 2s), but those should be weeded out by priors, and shouldn't become problematic.
+
+```
+
+
+## Modeling as Gaussian
+```{r}
+# a little data exploration
+dens(d$Reaction_time)
+summary(d$Reaction_time)
+sd(d$Reaction_time)
+
+#building first model as a gaussian, though I suspect a lognormal would be more appropriate.
+
+rt_f0 = bf(Reaction_time ~ 0 + Congruity + (1|Participant))
+
+
+get_prior(rt_f0,d, family= gaussian())
+
+rt_p0 = c(
+  prior(normal(575, 204), class = b),
+  prior(normal(204,102), class = sd),
+  prior(normal(204,102), class = sigma)
+)
+
+rt_gauss_p0 = brm(
+  rt_f0,
+  d,
+  family = gaussian(),
+  prior = rt_p0,
+  sample_prior = "only",
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_gauss_p0",
+  file_refit = "on_change"
+)
+
+pp_check(rt_gauss_p0, nsamples = 100)
+plot(conditional_effects(rt_gauss_p0), points = TRUE)
+
+
+rt_gauss_0 = brm(
+  rt_f0,
+  d,
+  family = gaussian(),
+  prior = rt_p0,
+  sample_prior = T,
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_gauss",
+  file_refit = "on_change"
+)
+
+
+pp_check(rt_gauss_0, nsamples = 100)
+plot(conditional_effects(rt_gauss_0), points = TRUE)
+
+
+posterior_rt_gauss = posterior_samples(rt_gauss_0, add_chain = TRUE)
+
+mcmc_trace(posterior_rt_gauss, pars = vars(b_CongruityYes, b_CongruityNo),size = .25)
+mcmc_rank_overlay(posterior_rt_gauss, pars = vars(b_CongruityYes, b_CongruityNo))
+
+ggplot(posterior_rt_gauss)+ theme_classic() +
+  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+  geom_density(aes(b_CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(b_CongruityNo),alpha =0.5, fill="yellow")
+
+ggplot(posterior_rt_gauss)+ theme_classic() +
+  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+
+```
+## Modeling as shifted Lognormal
+```{r}
+
+mean(log(d$Reaction_time))
+sd(log(d$Reaction_time))
+
+
+rt_f0 = bf(Reaction_time ~ 0 + Congruity + (1|Participant))
+
+
+get_prior(rt_f0,d, family= shifted_lognormal)
+
+rt_p1 = c(
+  prior(normal(6.3, 0.25), class = b),
+  prior(normal(0.2,0.05), class = sd),
+  prior(normal(0.26,0.13), class = sigma)
+)
+
+rt_shift_lognorm_p0 = brm(
+  rt_f0,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p1,
+  sample_prior = "only",
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_p0",
+  file_refit = "on_change"
+)
+
+
+
+pp_check(rt_shift_lognorm_p0, nsamples = 100)
+plot(conditional_effects(rt_shift_lognorm_p0), points = TRUE)
+
+
+rt_shift_lognorm_m0 = brm(
+  rt_f0,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p1,
+  sample_prior = T,
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_m0",
+  file_refit = "on_change"
+)
+
+rt_shift_lognorm_m0
+
+pp_check(rt_shift_lognorm_m0, nsamples = 100)
+plot(conditional_effects(rt_shift_lognorm_m0), points = TRUE)
+
+
+posterior_rt_shift_lognorm = posterior_samples(rt_shift_lognorm_m0, add_chain = T)
+
+#traceplot
+mcmc_trace(posterior_rt_shift_lognorm, pars = vars(b_CongruityYes, b_CongruityNo),size = .25)
+mcmc_rank_overlay(posterior_rt_shift_lognorm, pars = vars(b_CongruityYes, b_CongruityNo))
+
+#prior posterior update checks
+
+ggplot(posterior_rt_shift_lognorm)+ theme_classic() +
+  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+  geom_density(aes(b_CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(b_CongruityNo),alpha =0.5, fill="yellow")
+
+ggplot(posterior_rt_shift_lognorm)+ theme_classic() +
+  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+
+ggplot(posterior_rt_shift_lognorm)+ theme_classic() +
+  geom_density(aes(prior_sd_Participant),alpha =0.5, fill="magenta")+
+  geom_density(aes(sd_Participant__Intercept),alpha =0.5, fill="cyan")
+
+
+
+
+
+
+                              ###attempting a model that also accounts for trial.
+
+#FAILED SPECTACULARLY, DONT RUN UNLESS YOU HAVE THE MODEL FILE, TAKES ~ 80 MINUTES TO RUN, AND IS CRAP
+#Participant as varying effect, within each participant modeling trial as a varying effect as well.
+
+
+#rt_f1 = bf(Reaction_time ~ 0 + Congruity + (1|Participant) + (1|Participant:Trial))
+#
+#
+#get_prior(rt_f1,d, family= shifted_lognormal)
+#
+#rt_p1 = c(
+#  prior(normal(6.3, 0.25), class = b),
+#  prior(normal(0.2,0.05), class = sd),
+#  prior(normal(0.26,0.13), class = sigma)
+#)
+#
+#rt_shift_lognorm_p1 = brm(
+#  rt_f1,
+#  d,
+#  family = shifted_lognormal,
+#  prior = rt_p1,
+#  sample_prior = "only",
+#  chains = 2,
+#  iter = 2000,
+#  cores = 4,
+#  control = list(
+#    adapt_delta = .99,
+#    max_treedepth = 20
+#    ),
+#  backend = "cmdstanr",
+#  threads = threading(2),
+#  file = "rt_shift_lognorm_p1",
+#  file_refit = "on_change"
+#)
+#
+#
+#
+#pp_check(rt_shift_lognorm_p1, nsamples = 100)
+#plot(conditional_effects(rt_shift_lognorm_p1), points = TRUE)
+#
+#
+#rt_shift_lognorm_m1 = brm(
+#  rt_f1,
+#  d,
+#  family = shifted_lognormal,
+#  prior = rt_p1,
+#  sample_prior = T,
+#  chains = 2,
+#  iter = 2000,
+#  cores = 4,
+#  control = list(
+#    adapt_delta = .99,
+#    max_treedepth = 20
+#    ),
+#  backend = "cmdstanr",
+#  threads = threading(2),
+#  file = "rt_shift_lognorm_m1",
+#  file_refit = "on_change"
+#)
+#
+#rt_shift_lognorm_m1
+#
+#pp_check(rt_shift_lognorm_m1, nsamples = 100)
+#plot(conditional_effects(rt_shift_lognorm_m1), points = TRUE)
+#
+#
+#posterior_rt_shift_lognorm_m1 = posterior_samples(rt_shift_lognorm_m1, add_chain = T)
+#
+##traceplot
+#mcmc_trace(posterior_rt_shift_lognorm_m1, pars = vars(b_CongruityYes, b_CongruityNo),size = .25)
+#mcmc_rank_overlay(posterior_rt_shift_lognorm_m1, pars = vars(b_CongruityYes, b_CongruityNo))
+#
+##prior posterior update checks
+#
+#ggplot(posterior_rt_shift_lognorm_m1)+ theme_classic() +
+#  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+#  geom_density(aes(b_CongruityYes),alpha =0.5, fill="cyan")+
+#  geom_density(aes(b_CongruityNo),alpha =0.5, fill="yellow")
+#
+#ggplot(posterior_rt_shift_lognorm_m1)+ theme_classic() +
+#  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+#  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+#
+#ggplot(posterior_rt_shift_lognorm_m1)+ theme_classic() +
+#  geom_density(aes(prior_sd_Participant),alpha =0.5, fill="magenta")+
+#  geom_density(aes(sd_Participant__Intercept),alpha =0.5, fill="cyan")
+
+
+#trying trial as main effect
+
+#rt_f2 = bf(Reaction_time ~ 0 + Congruity + Trial + (1|Participant))
+#
+#
+#get_prior(rt_f2,d, family= shifted_lognormal)
+#
+#rt_p2 = c(
+#  prior(normal(6.3, 0.25), class = b),
+#  prior(normal(0.02,0.01), class = b, coef = Trial),
+#  prior(normal(0.17,0.05), class = sd),
+#  prior(normal(0.26,0.13), class = sigma)
+#)
+#
+#rt_shift_lognorm_p2 = brm(
+#  rt_f2,
+#  d,
+#  family = shifted_lognormal,
+#  prior = rt_p2,
+#  sample_prior = "only",
+#  chains = 2,
+#  iter = 2000,
+#  cores = 4,
+#  control = list(
+#    adapt_delta = .99,
+#    max_treedepth = 20
+#    ),
+#  backend = "cmdstanr",
+#  threads = threading(2),
+#  file = "rt_shift_lognorm_p2",
+#  file_refit = "on_change"
+#)
+#
+##trial as a main effect really messes up the pp_check
+#
+#pp_check(rt_shift_lognorm_p2, nsamples = 100) 
+#plot(conditional_effects(rt_shift_lognorm_p2), points = TRUE)
+
+
+
+##looking at finger(response)interaction with congruity as a main effect as well.
+
+rt_f3 = bf(Reaction_time ~ 0 + Congruity:Response + (1|Participant))
+
+
+get_prior(rt_f3,d, family= shifted_lognormal)
+
+rt_p3 = c(
+  prior(normal(6.3, 0.25), class = b),
+  prior(normal(0.17,0.05), class = sd),
+  prior(normal(0.26,0.13), class = sigma)
+)
+
+rt_shift_lognorm_p3 = brm(
+  rt_f3,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p3,
+  sample_prior = "only",
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_p3",
+  file_refit = "on_change"
+)
+
+
+pp_check(rt_shift_lognorm_p3, nsamples = 100) 
+plot(conditional_effects(rt_shift_lognorm_p3), points = TRUE)
+
+
+rt_shift_lognorm_m3 = brm(
+  rt_f3,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p3,
+  sample_prior = T,
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_m3",
+  file_refit = "on_change"
+)
+
+rt_shift_lognorm_m3
+
+pp_check(rt_shift_lognorm_m3, nsamples = 100)
+plot(conditional_effects(rt_shift_lognorm_m3), points = TRUE)
+
+
+posterior_rt_shift_lognorm_m3 = posterior_samples(rt_shift_lognorm_m3, add_chain = T)
+
+#traceplot
+mcmc_trace(posterior_rt_shift_lognorm_m3, pars = vars("b_CongruityYes:ResponseIndex","b_CongruityYes:ResponseMiddle", "b_CongruityNo:ResponseIndex","b_CongruityNo:ResponseMiddle" ),size = .25)
+mcmc_rank_overlay(posterior_rt_shift_lognorm_m3, pars = vars("b_CongruityYes:ResponseIndex","b_CongruityYes:ResponseMiddle", "b_CongruityNo:ResponseIndex","b_CongruityNo:ResponseMiddle" ))
+
+#prior posterior update checks
+
+ggplot(posterior_rt_shift_lognorm_m3)+ theme_classic() +
+  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+  geom_density(aes(`b_CongruityYes:ResponseIndex`),alpha =0.5, fill="cyan")+
+  geom_density(aes(`b_CongruityYes:ResponseMiddle`),alpha =0.5, fill="blue")+
+  geom_density(aes(`b_CongruityNo:ResponseIndex`),alpha =0.5, fill="yellow")+
+  geom_density(aes(`b_CongruityNo:ResponseMiddle`),alpha =0.5, fill="orange")
+
+ggplot(posterior_rt_shift_lognorm_m3)+ theme_classic() +
+  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+
+ggplot(posterior_rt_shift_lognorm_m3)+ theme_classic() +
+  geom_density(aes(prior_sd_Participant),alpha =0.5, fill="magenta")+
+  geom_density(aes(sd_Participant__Intercept),alpha =0.5, fill="cyan")
+
+
+
+#Modeling with a likely better random structure
+
+rt_f4 = bf(Reaction_time ~ 0 + Congruity + (0 + Congruity|Participant))
+
+
+get_prior(rt_f4,d, family= shifted_lognormal)
+
+rt_p4 = c(
+  prior(normal(6.3, 0.25), class = b),
+  prior(normal(0.17,0.05), class = sd),
+  prior(normal(0.26,0.13), class = sigma)
+)
+
+rt_shift_lognorm_p4 = brm(
+  rt_f4,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p4,
+  sample_prior = "only",
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_p4",
+  file_refit = "on_change"
+)
+
+
+pp_check(rt_shift_lognorm_p4, nsamples = 100) 
+plot(conditional_effects(rt_shift_lognorm_p4), points = TRUE)
+
+
+rt_shift_lognorm_m4 = brm(
+  rt_f4,
+  d,
+  family = shifted_lognormal,
+  prior = rt_p4,
+  sample_prior = T,
+  chains = 2,
+  iter = 2000,
+  cores = 4,
+  control = list(
+    adapt_delta = .99,
+    max_treedepth = 20
+    ),
+  backend = "cmdstanr",
+  threads = threading(2),
+  file = "rt_shift_lognorm_m4",
+  file_refit = "on_change"
+)
+
+rt_shift_lognorm_m4
+
+pp_check(rt_shift_lognorm_m4, nsamples = 100)
+plot(conditional_effects(rt_shift_lognorm_m4), points = TRUE)
+
+
+posterior_rt_shift_lognorm_m4 = posterior_samples(rt_shift_lognorm_m4, add_chain = T)
+
+#traceplot
+mcmc_trace(posterior_rt_shift_lognorm_m4, pars = vars(b_CongruityYes, b_CongruityNo),size = .25)
+mcmc_rank_overlay(posterior_rt_shift_lognorm_m4, pars = vars(b_CongruityYes, b_CongruityNo))
+
+#prior posterior update checks
+
+ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+  geom_density(aes(b_CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(b_CongruityNo),alpha =0.5, fill="yellow")
+
+ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+
+ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_sd_Participant),alpha =0.5, fill="magenta")+
+  geom_density(aes(sd_Participant__CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(sd_Participant__CongruityNo),alpha =0.5, fill="Yellow")
+
+ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_ndt),alpha =0.5, fill="magenta")+
+  geom_density(aes(ndt),alpha =0.5, fill="cyan")
+
+
+```
+
+###model Comparison
+
+```{r}
+
+loo_gauss = loo(rt_gauss_0, reloo = TRUE)
+loo_shift_0 = loo(rt_shift_lognorm_m0, reloo = TRUE)
+loo_shift_3 = loo(rt_shift_lognorm_m3, reloo = TRUE)
+loo_shift_4 = loo(rt_shift_lognorm_m4, reloo = TRUE)
+
+comp = loo_compare(loo_shift_0, loo_shift_3, loo_shift_4)
+comp
+
+comp_weights = loo_model_weights(rt_shift_lognorm_m0, rt_shift_lognorm_m3, rt_shift_lognorm_m4, reloo = T)
+comp_weights
+
+```
+
+
+###Hypothesis Testing
+```{r}
+hypothesis(rt_shift_lognorm_m4, "CongruityYes < CongruityNo", class = "b")
+
+
+
+plot1 = ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_b),alpha =0.5, fill="magenta")+
+  geom_density(aes(b_CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(b_CongruityNo),alpha =0.5, fill="yellow")
+
+plot2 = ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_sigma),alpha =0.5, fill="magenta")+
+  geom_density(aes(sigma),alpha =0.5, fill="cyan")
+
+plot3 = ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_sd_Participant),alpha =0.5, fill="magenta")+
+  geom_density(aes(sd_Participant__CongruityYes),alpha =0.5, fill="cyan")+
+  geom_density(aes(sd_Participant__CongruityNo),alpha =0.5, fill="Yellow")
+
+plot4 = ggplot(posterior_rt_shift_lognorm_m4)+ theme_classic() +
+  geom_density(aes(prior_ndt),alpha =0.5, fill="magenta")+
+  geom_density(aes(ndt),alpha =0.5, fill="cyan")
+
+plot1 + plot2 + plot3 + plot4
+
+rt_shift_lognorm_m4
+
+```
+
+###Looking at effect at participant level, the varying effects
+
+```{r}
+
+theme_set(theme_forest())
+forest(rt_shift_lognorm_m4, sort = TRUE)
+
+
+
+
+rt_shift_lognorm_m4_ranefs = ranef(rt_shift_lognorm_m4, summary=TRUE)[[1]]
+rt_shift_lognorm_m4_ranefs = as.data.frame(ranef(rt_shift_lognorm_m4, summary=TRUE)[[1]])
+rt_shift_lognorm_m4_ranefs$YesNo = rt_shift_lognorm_m4_ranefs$Estimate.CongruityYes- rt_shift_lognorm_m4_ranefs$Estimate.CongruityNo
+rt_shift_lognorm_m4_ranefs
+
+```
+
